@@ -100,9 +100,91 @@ function App() {
     }
   };
 
-  const handleLoadNewFormatJson = (jsonText: string) => {
+  const handleLoadNewFormatJson = async () => {
     try {
-      const data: NewFormatAPIResponse = JSON.parse(jsonText.trim());
+      const response = await fetch(`/mock/get_nearby_roads_safety?center_lat=25.033964&center_lng=121.564468`);
+
+      let data: NewFormatAPIResponse;
+
+      if (!response.ok) {
+        console.warn('API request failed, using mock data');
+        data = {
+          meta: {
+            at: "2025-11-08T23:00:00+08:00",
+            center: { lat: 25.033964, lng: 121.564468 },
+            radius_m: 200,
+            tz: "Asia/Taipei"
+          },
+          summary: {
+            safety_score: 45.5,
+            analysis: {
+              cctv_count: 8,
+              metro_count: 2,
+              robbery_count: 1,
+              streetlight_count: 25,
+              police_count: 0
+            }
+          },
+          resources: {
+            cctv: [
+              {
+                safety: 1,
+                type: "cctv",
+                name: "CAM-12345",
+                location: { lat: 25.03452, lng: 121.56501 },
+                distance_m: 65,
+                phone: ""
+              }
+            ],
+            metro: [
+              {
+                safety: 1,
+                type: "metro",
+                name: "市政府站 1 號出口",
+                location: { lat: 25.03398, lng: 121.56512 },
+                distance_m: 120,
+                phone: ""
+              }
+            ],
+            criminal: [
+              {
+                safety: -1,
+                type: "robbery_incident",
+                name: "搶奪案件 - 2024-10-15",
+                location: { lat: 25.03301, lng: 121.56389 },
+                distance_m: 180,
+                incident_date: "2024-10-15",
+                incident_time: "22:00-24:00",
+                location_desc: "信義區市府路",
+                phone: ""
+              }
+            ],
+            streetlight: [
+              {
+                safety: 1,
+                type: "streetlight",
+                name: "LIGHT-67890",
+                location: { lat: 25.03421, lng: 121.56478 },
+                distance_m: 45,
+                phone: ""
+              }
+            ],
+            police: [
+              {
+                safety: 1,
+                type: "police",
+                name: "信義分局",
+                location: { lat: 25.03289, lng: 121.56234 },
+                distance_m: 340,
+                phone: "110",
+                open_now: true
+              }
+            ]
+          }
+        };
+      } else {
+        data = await response.json();
+      }
 
       const allPlaces: SafetyPlace[] = [
         ...data.resources.cctv,
@@ -132,8 +214,8 @@ function App() {
       setSafetyData(convertedData);
       setMapCenter([data.meta.center.lat, data.meta.center.lng]);
     } catch (error) {
-      alert('JSON 格式錯誤，請檢查輸入的資料');
-      console.error('JSON parse error:', error);
+      console.error('Failed to load data:', error);
+      alert('載入資料失敗，請稍後再試');
     }
   };
 
@@ -204,35 +286,22 @@ function App() {
         <p className="text-teal-50 text-xs sm:text-sm mt-1">為您的安全把關</p>
       </header>
 
-      <SafetyIndicator data={safetyData} />
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className={`flex-1 p-2 sm:p-3 ${!showMap ? 'hidden' : ''}`}>
-          <MapView
-            markers={markers}
-            safetyPlaces={safetyData?.places || []}
-            center={mapCenter}
-            radiusCircle={
-              safetyData
-                ? {
-                    lat: safetyData.meta.center.lat,
-                    lng: safetyData.meta.center.lng,
-                    radius: safetyData.meta.radius_m,
-                  }
-                : undefined
-            }
-            showCurrentPosition={showCurrentPosition}
-          />
-        </div>
-
-        {safetyData && (
-          <div className="bg-white border-t border-gray-200 p-3 sm:p-4 overflow-y-auto max-h-[35vh] flex-shrink-0">
-            <div className="mb-3">
-              <SafetySummary data={safetyData} onUpdateCenter={handleUpdateCenter} />
-            </div>
-            <PlacesList places={safetyData.places} />
-          </div>
-        )}
+      <div className="flex-1 overflow-hidden">
+        <MapView
+          markers={markers}
+          safetyPlaces={safetyData?.places || []}
+          center={mapCenter}
+          radiusCircle={
+            safetyData
+              ? {
+                  lat: safetyData.meta.center.lat,
+                  lng: safetyData.meta.center.lng,
+                  radius: safetyData.meta.radius_m,
+                }
+              : undefined
+          }
+          showCurrentPosition={showCurrentPosition}
+        />
       </div>
 
       <div className="fixed bottom-4 right-4 flex flex-col gap-3 z-[900]">
@@ -287,57 +356,7 @@ function App() {
           載入資料
         </button>
         <button
-          onClick={() => {
-            const jsonInput = document.createElement('textarea');
-            jsonInput.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:500px;height:60vh;z-index:9999;padding:1rem;border:2px solid #f59e0b;border-radius:12px;font-family:monospace;font-size:12px;background:white;box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);';
-            jsonInput.placeholder = '貼上新格式 JSON 資料...';
-            jsonInput.value = JSON.stringify({
-              meta: { at: "2025-11-08T23:00:00+08:00", center: { lat: 25.033964, lng: 121.564468 }, radius_m: 200, tz: "Asia/Taipei" },
-              summary: { safety_score: 45.5, analysis: { cctv_count: 8, metro_count: 2, robbery_count: 1, streetlight_count: 25, police_count: 0 } },
-              resources: {
-                cctv: [{ safety: 1, type: "cctv", name: "CAM-12345", location: { lat: 25.03452, lng: 121.56501 }, distance_m: 65, phone: "" }],
-                metro: [{ safety: 1, type: "metro", name: "市政府站 1 號出口", location: { lat: 25.03398, lng: 121.56512 }, distance_m: 120, phone: "" }],
-                criminal: [{ safety: -1, type: "robbery_incident", name: "搶奪案件 - 2024-10-15", location: { lat: 25.03301, lng: 121.56389 }, distance_m: 180, incident_date: "2024-10-15", incident_time: "22:00-24:00", location_desc: "信義區市府路", phone: "" }],
-                streetlight: [{ safety: 1, type: "streetlight", name: "LIGHT-67890", location: { lat: 25.03421, lng: 121.56478 }, distance_m: 45, phone: "" }],
-                police: [{ safety: 1, type: "police", name: "信義分局", location: { lat: 25.03289, lng: 121.56234 }, distance_m: 340, phone: "110", open_now: true }]
-              }
-            }, null, 2);
-
-            const overlay = document.createElement('div');
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;';
-
-            const btnContainer = document.createElement('div');
-            btnContainer.style.cssText = 'position:fixed;bottom:10%;left:50%;transform:translateX(-50%);z-index:10000;display:flex;gap:12px;';
-
-            const confirmBtn = document.createElement('button');
-            confirmBtn.textContent = '載入';
-            confirmBtn.style.cssText = 'padding:12px 28px;background:#f59e0b;color:white;border:none;border-radius:12px;font-weight:600;box-shadow:0 4px 6px -1px rgba(245,158,11,0.3);';
-            confirmBtn.onclick = () => {
-              handleLoadNewFormatJson(jsonInput.value);
-              document.body.removeChild(jsonInput);
-              document.body.removeChild(overlay);
-              document.body.removeChild(btnContainer);
-            };
-
-            const cancelBtn = document.createElement('button');
-            cancelBtn.textContent = '取消';
-            cancelBtn.style.cssText = 'padding:12px 28px;background:#f3f4f6;color:#374151;border:none;border-radius:12px;font-weight:600;';
-            cancelBtn.onclick = () => {
-              document.body.removeChild(jsonInput);
-              document.body.removeChild(overlay);
-              document.body.removeChild(btnContainer);
-            };
-
-            overlay.onclick = cancelBtn.onclick;
-
-            btnContainer.appendChild(confirmBtn);
-            btnContainer.appendChild(cancelBtn);
-
-            document.body.appendChild(overlay);
-            document.body.appendChild(jsonInput);
-            document.body.appendChild(btnContainer);
-            jsonInput.focus();
-          }}
+          onClick={handleLoadNewFormatJson}
           className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-semibold py-3 px-5 rounded-full transition-all text-sm shadow-lg hover:shadow-xl whitespace-nowrap"
         >
           載入新格式
