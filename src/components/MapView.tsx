@@ -112,6 +112,8 @@ interface MapViewProps {
   center: LatLngExpression;
   radiusCircle?: { lat: number; lng: number; radius: number };
   showCurrentPosition?: boolean;
+  readOnly?: boolean; // 新增
+
 }
 
 export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurrentPosition }: MapViewProps) {
@@ -156,17 +158,19 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
             position={[radiusCircle.lat, radiusCircle.lng]}
             icon={createCenterIcon()}
           >
-            <Popup>
-              <div className="text-sm min-w-[180px]">
-                <p className="font-semibold text-base mb-2">分析中心點</p>
-                <p className="text-gray-600">
-                  座標: {radiusCircle.lat.toFixed(6)}, {radiusCircle.lng.toFixed(6)}
-                </p>
-                <p className="text-gray-600 mt-1">
-                  分析範圍: {radiusCircle.radius}m
-                </p>
-              </div>
-            </Popup>
+            {!readOnly && (
+              <Popup>
+                <div className="text-sm min-w-[180px]">
+                  <p className="font-semibold text-base mb-2">分析中心點</p>
+                  <p className="text-gray-600">
+                    座標: {radiusCircle.lat.toFixed(6)}, {radiusCircle.lng.toFixed(6)}
+                  </p>
+                  <p className="text-gray-600 mt-1">
+                    分析範圍: {radiusCircle.radius}m
+                  </p>
+                </div>
+              </Popup>
+            )}
           </Marker>
           <Circle
             center={[radiusCircle.lat, radiusCircle.lng]}
