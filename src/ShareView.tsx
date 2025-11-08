@@ -7,10 +7,16 @@ interface ShareData {
   lng: number;
 }
 
-export default function ShareView() {
+// 加上 props
+interface ShareViewProps {
+  readOnly?: boolean;
+}
+
+export default function ShareView({ readOnly }: ShareViewProps) {
   const { id } = useParams<{ id: string }>();
   const [center, setCenter] = useState<[number, number] | null>(null);
 
+  /*
   useEffect(() => {
     async function fetchData() {
       try {
@@ -28,11 +34,25 @@ export default function ShareView() {
     // 可選：訂閱 WebSocket / Firebase，讓地圖即時更新
   }, [id]);
 
+  */
+
+  useEffect(() => {
+  // 暫時用假資料，不呼叫後端
+  setCenter([25.038420, 121.533626]);
+}, []);
+
   if (!center) return <div>載入中...</div>;
 
   return (
     <div className="h-screen w-screen">
-      <MapView center={center} markers={[]} showCurrentPosition={true} />
+      <MapView
+        safetyPlaces={[]}
+        center={center}
+        markers={[]} 
+        showCurrentPosition={true}
+        // 如果 MapView 也支援 readOnly，可以傳下去
+        readOnly={readOnly} 
+      />
     </div>
   );
 }
