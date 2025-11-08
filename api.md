@@ -35,11 +35,13 @@ curl -X GET "https://api.example.com/safety-overview?lat=25.033964&lng=121.56446
   "meta": {
     "at": "2025-11-08T23:00:00+08:00",
     "center": { "lat": 25.033964, "lng": 121.564468 },
-    "radius_m": 200
+    "radius_m": 200,
+    "tz": "Asia/Taipei"
   },
   "summary": {
     "level": 2,
     "label": "需注意",
+    "safety_score": 2.1,
     "analysis": {
       "safe_places": 12,
       "warning_zones": 3,
@@ -51,9 +53,26 @@ curl -X GET "https://api.example.com/safety-overview?lat=25.033964&lng=121.56446
   "places": [
     {
       "safety": 1,
+      "type": "store",
       "name": "7-ELEVEN 市府門市",
       "location": { "lat": 25.03452, "lng": 121.56501 },
-      "open_now": true
+      "distance_m": 65,
+      "open_now": true,
+      "phone": "+8862647392323",
+      "hours": {
+        "tz": "Asia/Taipei",
+        "regular": [
+          { "dow": "Mon", "open": "09:00", "close": "21:00" },
+          { "dow": "Tue", "open": "09:00", "close": "21:00" },
+          { "dow": "Wed", "open": "09:00", "close": "21:00" },
+          { "dow": "Thu", "open": "09:00", "close": "21:00" },
+          { "dow": "Fri", "open": "09:00", "close": "21:00" },
+          { "dow": "Sat", "open": "10:00", "close": "18:40" },
+          { "dow": "Sun", "open": "10:00", "close": "18:00" }
+        ],
+        "note": "Regular business hours"
+      },
+      "signals": ["well_lit", "crowded", "near_main_road", "safe_haven"]
     }
   ]
 }
@@ -65,6 +84,20 @@ curl -X GET "https://api.example.com/safety-overview?lat=25.033964&lng=121.56446
 | `summary.level` | 安全等級 |
 | `summary.analysis` | 分析細節（照明、人流、警局距離等） |
 | `places[]` | 安全店家清單 |
+
+## 通用欄位（所有 `type` 共用）
+| 欄位 | 型別 | 必填 | 說明 |
+|---|---|:--:|---|
+| `type` | enum | ✅ | 據點類型：`store`（店家）、`police`（警局）、`cctv`（公共監視器）、`metro`（捷運站） |
+| `safety` | int | ✅ | 安全係數：`1=優`、`2=需注意`、`3=危險` |
+| `name` | string | ✅ | 顯示名稱 |
+| `location.lat` | number | ✅ | 緯度 |
+| `location.lng` | number | ✅ | 經度 |
+| `open_now` | boolean | ✅ | 是否「此刻」可求助／可進入（`cctv` 固定回傳 `true`） |
+| `distance_m` | number | － | 與查詢中心距離（公尺） |
+| `phone` | string\|null | － | 連絡電話（`police` 可為 `110`/派出所電話） |
+| `hours` | object | － | 營業／受理時間（見下方 `hours` 格式） |
+| `signals[]` | string[] | － | 安全訊號標籤：`well_lit`, `cctv`, `crowded`, `near_main_road`, `safe_haven`… |
 
 
 ## 🧭 `summary.level` — 安全等級劃分說明
