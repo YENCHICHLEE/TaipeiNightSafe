@@ -154,7 +154,7 @@ function App() {
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <header className="bg-gradient-to-r from-teal-500 to-teal-600 p-4 sm:p-5 flex-shrink-0 shadow-sm">
         <h1 className="text-xl sm:text-2xl font-bold text-white">
-          夜歸安全地圖
+          01夜歸
         </h1>
         <p className="text-teal-50 text-xs sm:text-sm mt-1">為您的安全把關</p>
       </header>
