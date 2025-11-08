@@ -39,7 +39,7 @@ extension MyServiceIdExt on MyServiceItemId {
         description: '你回家，我等你',
         icon: Assets.svg.icon1999phoneS.svg(),
         category: MyServiceCategory.cityService,
-        destinationUrl: 'http://localhost:5174/', // 改成你的 Mac IP
+        destinationUrl: 'http://192.168.33.255:5174/', // 改成你的 Mac IP
       ),
       MyServiceItemId.districtOffice => MyServiceItem(
         title: '守夜精靈',
