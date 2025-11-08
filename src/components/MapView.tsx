@@ -3,7 +3,7 @@ import { LatLngExpression } from 'leaflet';
 import { MarkerData, SafetyPlace } from '../types';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Store, Shield, Camera, Train, Target, Lightbulb, AlertTriangle } from 'lucide-react';
+import { Store, Shield, Camera, Train, Target } from 'lucide-react';
 import { renderToString } from 'react-dom/server';
 import { useEffect } from 'react';
 
@@ -58,12 +58,6 @@ const createCustomIcon = (type: string, safety: number) => {
     case 'metro':
       IconComponent = Train;
       break;
-    case 'streetlight':
-      IconComponent = Lightbulb;
-      break;
-    case 'robbery_incident':
-      IconComponent = AlertTriangle;
-      break;
     default:
       IconComponent = Store;
   }
@@ -72,8 +66,6 @@ const createCustomIcon = (type: string, safety: number) => {
     bgColor = '#3CCF4E';
   } else if (safety === 2) {
     bgColor = '#FFC107';
-  } else if (safety === -1) {
-    bgColor = '#DC2626';
   } else {
     bgColor = '#FF5252';
   }
@@ -167,17 +159,17 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
             icon={createCenterIcon()}
           >
             {!readOnly && (
-              <Popup>
-                <div className="text-sm min-w-[180px]">
-                  <p className="font-semibold text-base mb-2">分析中心點</p>
-                  <p className="text-gray-600">
-                    座標: {radiusCircle.lat.toFixed(6)}, {radiusCircle.lng.toFixed(6)}
-                  </p>
-                  <p className="text-gray-600 mt-1">
-                    分析範圍: {radiusCircle.radius}m
-                  </p>
-                </div>
-              </Popup>
+            <Popup>
+              <div className="text-sm min-w-[180px]">
+                <p className="font-semibold text-base mb-2">分析中心點</p>
+                <p className="text-gray-600">
+                  座標: {radiusCircle.lat.toFixed(6)}, {radiusCircle.lng.toFixed(6)}
+                </p>
+                <p className="text-gray-600 mt-1">
+                  分析範圍: {radiusCircle.radius}m
+                </p>
+              </div>
+            </Popup>
             )}
           </Marker>
           <Circle
@@ -197,6 +189,7 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
       {markers.map((marker) => (
         <div key={marker.id}>
           <Marker position={[marker.lat, marker.lng]}>
+            {!readOnly && (
             <Popup>
               <div className="text-sm">
                 <p className="font-semibold">{marker.label}</p>
@@ -206,6 +199,7 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
                 <p className="text-gray-600">範圍: {marker.radius}m</p>
               </div>
             </Popup>
+            )}
           </Marker>
           <Circle
             center={[marker.lat, marker.lng]}
@@ -225,41 +219,19 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
           position={[place.location.lat, place.location.lng]}
           icon={createCustomIcon(place.type, place.safety)}
         >
+          {!readOnly && (
           <Popup>
             <div className="text-sm min-w-[200px]">
               <p className="font-semibold text-base mb-2">{place.name}</p>
               <div className="space-y-1">
                 <p className="text-gray-600">
-                  類型: {
-                    place.type === 'store' ? '商店' :
-                    place.type === 'police' ? '警局' :
-                    place.type === 'cctv' ? '監視器' :
-                    place.type === 'metro' ? '捷運站' :
-                    place.type === 'streetlight' ? '路燈' :
-                    place.type === 'robbery_incident' ? '犯罪事件' :
-                    place.type
-                  }
+                  類型: {place.type === 'store' ? '商店' : place.type === 'police' ? '警局' : place.type === 'cctv' ? '監視器' : '捷運站'}
                 </p>
                 <p className="text-gray-600">距離: {place.distance_m}m</p>
-                {place.type === 'robbery_incident' && (
-                  <>
-                    {place.incident_date && (
-                      <p className="text-red-600 font-medium">事件日期: {place.incident_date}</p>
-                    )}
-                    {place.incident_time && (
-                      <p className="text-red-600">事件時間: {place.incident_time}</p>
-                    )}
-                    {place.location_desc && (
-                      <p className="text-gray-600">地點: {place.location_desc}</p>
-                    )}
-                  </>
-                )}
-                {place.open_now !== undefined && (
-                  <p className={`font-medium ${place.open_now ? 'text-green-600' : 'text-red-600'}`}>
-                    {place.open_now ? '✓ 營業中' : '✗ 已打烊'}
-                  </p>
-                )}
-                {place.phone && place.phone !== '' && (
+                <p className={`font-medium ${place.open_now ? 'text-green-600' : 'text-red-600'}`}>
+                  {place.open_now ? '✓ 營業中' : '✗ 已打烊'}
+                </p>
+                {place.phone && (
                   <p className="text-gray-600">電話: {place.phone}</p>
                 )}
                 {place.signals && place.signals.length > 0 && (
@@ -277,6 +249,7 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
               </div>
             </div>
           </Popup>
+          )}
         </Marker>
       ))}
     </MapContainer>
