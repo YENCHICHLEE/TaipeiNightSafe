@@ -150,6 +150,31 @@ function App() {
     }
   };
 
+ const handleShareLocation = async () => {
+  try {
+    const [lat, lng] = mapCenter;
+    const url = `https://www.google.com/maps?q=${lat},${lng}`;
+
+    // 支援 Web Share API
+    if (navigator.share) {
+      await navigator.share({
+        title: "我的位置",
+        text: "這是我目前的位置",
+        url,
+      });
+      return;
+    }
+
+    // fallback → 直接複製
+    await navigator.clipboard.writeText(url);
+    alert("已複製位置連結！");
+  } catch (e) {
+    console.error("分享失敗", e);
+    alert("分享失敗");
+  }
+};
+ 
+
   return (
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <header className="bg-gradient-to-r from-teal-500 to-teal-600 p-4 sm:p-5 flex-shrink-0 shadow-sm">
