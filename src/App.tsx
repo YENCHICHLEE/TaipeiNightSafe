@@ -106,6 +106,27 @@ function App() {
     }
   };
 
+  const handleGetCurrentPosition = () => {
+    alert(`當前地圖中心位置：\n緯度: ${mapCenter[0]}\n經度: ${mapCenter[1]}`);
+  };
+
+  const handleNotifyFlutter = () => {
+    const message = {
+      name: 'mapCenter',
+      data: {
+        latitude: mapCenter[0],
+        longitude: mapCenter[1]
+      }
+    };
+
+    if ((window as any).flutterObject) {
+      (window as any).flutterObject.postMessage(JSON.stringify(message));
+      alert('已通知 Flutter');
+    } else {
+      alert('Flutter 環境未偵測到');
+    }
+  };
+
   return (
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <header className="bg-gradient-to-r from-teal-500 to-teal-600 p-4 sm:p-5 flex-shrink-0 shadow-sm">
@@ -201,6 +222,18 @@ function App() {
           className="flex-1 bg-white border-2 border-teal-500 text-teal-600 hover:bg-teal-50 active:bg-teal-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
         >
           設定位置
+        </button>
+        <button
+          onClick={handleGetCurrentPosition}
+          className="flex-1 bg-white border-2 border-blue-500 text-blue-600 hover:bg-blue-50 active:bg-blue-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
+        >
+          顯示位置
+        </button>
+        <button
+          onClick={handleNotifyFlutter}
+          className="flex-1 bg-white border-2 border-purple-500 text-purple-600 hover:bg-purple-50 active:bg-purple-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
+        >
+          通知Flutter
         </button>
         {safetyData && (
           <button
