@@ -16,12 +16,15 @@ function App() {
   const [showMap, setShowMap] = useState(false);
 
   const handleGetCurrentPosition = () => {
+    let locationReceived = false;
+
     const handlePositionUpdate = (event: MessageEvent) => {
       try {
         const response = JSON.parse(event.data);
         if (response.name === 'location' && response.data) {
           const { latitude, longitude } = response.data;
 
+          locationReceived = true;
           setMapCenter([latitude, longitude]);
           setShowMap(true);
 
@@ -58,6 +61,11 @@ function App() {
     setTimeout(() => {
       setShowCurrentPosition(false);
       window.removeEventListener('message', handlePositionUpdate);
+
+      if (!locationReceived) {
+        setMapCenter([25.033964, 121.564468]);
+        setShowMap(true);
+      }
     }, 5000);
   };
 
