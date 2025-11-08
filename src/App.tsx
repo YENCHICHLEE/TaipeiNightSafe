@@ -87,10 +87,18 @@ function App() {
 
       try {
         const data = await loadSafetyData(25.033964, 121.564468);
-        setSafetyData(data);
+
+        const filteredData = {
+          ...data,
+          places: data.places.filter(place =>
+            place.type === 'store' || place.type === 'police'
+          )
+        };
+
+        setSafetyData(filteredData);
         setMapCenter([data.meta.center.lat, data.meta.center.lng]);
         setShowMap(true);
-        console.log('自動載入安全資料成功');
+        console.log('自動載入安全資料成功 (僅顯示店家和警局)');
       } catch (error) {
         console.error('自動載入失敗：', error);
       }
