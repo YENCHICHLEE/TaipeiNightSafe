@@ -7,6 +7,7 @@ import { SafetySummary } from './components/SafetySummary';
 import { SafetyIndicator } from './components/SafetyIndicator';
 import { PlacesList } from './components/PlacesList';
 import { MarkerData, SafetyAPIResponse, NewFormatAPIResponse, SafetyPlace } from './types';
+import { loadSafetyData } from './utils/safetyDataLoader';
 
 function App() {
   const [markers, setMarkers] = useState<MarkerData[]>([]);
@@ -363,6 +364,21 @@ function App() {
           className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-semibold py-3 px-5 rounded-full transition-all text-sm shadow-lg hover:shadow-xl whitespace-nowrap"
         >
           載入新格式
+        </button>
+        <button
+          onClick={async () => {
+            try {
+              const data = await loadSafetyData(25.033964, 121.564468);
+              setSafetyData(data);
+              setMapCenter([data.meta.center.lat, data.meta.center.lng]);
+              setShowMap(true);
+            } catch (error) {
+              console.error('測試載入失敗：', error);
+            }
+          }}
+          className="bg-purple-500 hover:bg-purple-600 active:bg-purple-700 text-white font-semibold py-3 px-5 rounded-full transition-all text-sm shadow-lg hover:shadow-xl whitespace-nowrap"
+        >
+          測試載入
         </button>
       </div>
     </div>
