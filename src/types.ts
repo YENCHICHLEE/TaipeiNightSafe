@@ -30,11 +30,11 @@ export interface SafetyAPIResponse {
 
 export interface SafetyPlace {
   safety: number;
-  type: 'store' | 'police' | 'cctv' | 'metro';
+  type: 'store' | 'police' | 'cctv' | 'metro' | 'robbery_incident' | 'streetlight';
   name: string;
   location: { lat: number; lng: number };
   distance_m: number;
-  open_now: boolean;
+  open_now?: boolean;
   phone?: string;
   hours?: {
     tz: string;
@@ -46,4 +46,33 @@ export interface SafetyPlace {
     note?: string;
   };
   signals?: string[];
+  incident_date?: string;
+  incident_time?: string;
+  location_desc?: string;
+}
+
+export interface NewFormatAPIResponse {
+  meta: {
+    at: string;
+    center: { lat: number; lng: number };
+    radius_m: number;
+    tz: string;
+  };
+  summary: {
+    safety_score: number;
+    analysis: {
+      cctv_count: number;
+      metro_count: number;
+      robbery_count: number;
+      streetlight_count: number;
+      police_count: number;
+    };
+  };
+  resources: {
+    cctv: SafetyPlace[];
+    metro: SafetyPlace[];
+    criminal: SafetyPlace[];
+    streetlight: SafetyPlace[];
+    police: SafetyPlace[];
+  };
 }

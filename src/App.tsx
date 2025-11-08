@@ -6,22 +6,25 @@ import { JsonInput } from './components/JsonInput';
 import { SafetySummary } from './components/SafetySummary';
 import { SafetyIndicator } from './components/SafetyIndicator';
 import { PlacesList } from './components/PlacesList';
-import { MarkerData, SafetyAPIResponse } from './types';
+import { MarkerData, SafetyAPIResponse, NewFormatAPIResponse, SafetyPlace } from './types';
 
 function App() {
   const [markers, setMarkers] = useState<MarkerData[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number]>([25.0330, 121.5654]);
   const [safetyData, setSafetyData] = useState<SafetyAPIResponse | null>(null);
   const [showCurrentPosition, setShowCurrentPosition] = useState(false);
-  const [showMap, setShowMap] = useState(false);
+  const [showMap, setShowMap] = useState(true);
 
   const handleGetCurrentPosition = () => {
+    let locationReceived = false;
+
     const handlePositionUpdate = (event: MessageEvent) => {
       try {
         const response = JSON.parse(event.data);
         if (response.name === 'location' && response.data) {
           const { latitude, longitude } = response.data;
 
+          locationReceived = true;
           setMapCenter([latitude, longitude]);
           setShowMap(true);
 
@@ -58,6 +61,11 @@ function App() {
     setTimeout(() => {
       setShowCurrentPosition(false);
       window.removeEventListener('message', handlePositionUpdate);
+
+      if (!locationReceived) {
+        setMapCenter([25.033964, 121.564468]);
+        setShowMap(true);
+      }
     }, 5000);
   };
 
@@ -89,6 +97,128 @@ function App() {
     } catch (error) {
       alert('JSON 格式錯誤，請檢查輸入的資料');
       console.error('JSON parse error:', error);
+    }
+  };
+
+  const handleLoadNewFormatJson = async () => {
+    try {
+      let data: NewFormatAPIResponse;
+
+      try {
+        const response = await fetch(`/mock/get_nearby_roads_safety?center_lat=25.033964&center_lng=121.564468`);
+
+        if (response.ok) {
+          data = await response.json();
+        } else {
+          throw new Error('API request failed');
+        }
+      } catch (fetchError) {
+        console.warn('API request failed, using mock data', fetchError);
+        data = {
+          meta: {
+            at: "2025-11-08T23:00:00+08:00",
+            center: { lat: 25.033964, lng: 121.564468 },
+            radius_m: 200,
+            tz: "Asia/Taipei"
+          },
+          summary: {
+            safety_score: 45.5,
+            analysis: {
+              cctv_count: 8,
+              metro_count: 2,
+              robbery_count: 1,
+              streetlight_count: 25,
+              police_count: 0
+            }
+          },
+          resources: {
+            cctv: [
+              {
+                safety: 1,
+                type: "cctv",
+                name: "CAM-12345",
+                location: { lat: 25.03452, lng: 121.56501 },
+                distance_m: 65,
+                phone: ""
+              }
+            ],
+            metro: [
+              {
+                safety: 1,
+                type: "metro",
+                name: "市政府站 1 號出口",
+                location: { lat: 25.03398, lng: 121.56512 },
+                distance_m: 120,
+                phone: ""
+              }
+            ],
+            criminal: [
+              {
+                safety: -1,
+                type: "robbery_incident",
+                name: "搶奪案件 - 2024-10-15",
+                location: { lat: 25.03301, lng: 121.56389 },
+                distance_m: 180,
+                incident_date: "2024-10-15",
+                incident_time: "22:00-24:00",
+                location_desc: "信義區市府路",
+                phone: ""
+              }
+            ],
+            streetlight: [
+              {
+                safety: 1,
+                type: "streetlight",
+                name: "LIGHT-67890",
+                location: { lat: 25.03421, lng: 121.56478 },
+                distance_m: 45,
+                phone: ""
+              }
+            ],
+            police: [
+              {
+                safety: 1,
+                type: "police",
+                name: "信義分局",
+                location: { lat: 25.03289, lng: 121.56234 },
+                distance_m: 340,
+                phone: "110",
+                open_now: true
+              }
+            ]
+          }
+        };
+      }
+
+      const allPlaces: SafetyPlace[] = [
+        ...data.resources.cctv,
+        ...data.resources.metro,
+        ...data.resources.criminal,
+        ...data.resources.streetlight,
+        ...data.resources.police
+      ];
+
+      const convertedData: SafetyAPIResponse = {
+        meta: data.meta,
+        summary: {
+          level: data.summary.safety_score >= 70 ? 1 : data.summary.safety_score >= 40 ? 2 : 3,
+          label: data.summary.safety_score >= 70 ? '安全' : data.summary.safety_score >= 40 ? '需注意' : '危險',
+          safety_score: data.summary.safety_score,
+          analysis: {
+            safe_places: data.summary.analysis.cctv_count + data.summary.analysis.metro_count + data.summary.analysis.police_count,
+            warning_zones: data.summary.analysis.robbery_count,
+            lighting_score: data.summary.analysis.streetlight_count / 30,
+            police_distance_m: data.resources.police.length > 0 ? data.resources.police[0].distance_m : 999,
+            last_incident_days: 30
+          }
+        },
+        places: allPlaces
+      };
+
+      setSafetyData(convertedData);
+      setMapCenter([data.meta.center.lat, data.meta.center.lng]);
+    } catch (error) {
+      console.error('Unexpected error:', error);
     }
   };
 
@@ -184,38 +314,25 @@ function App() {
         <p className="text-teal-50 text-xs sm:text-sm mt-1">為您的安全把關</p>
       </header>
 
-      <SafetyIndicator data={safetyData} />
-
-      <div className="flex-1 flex flex-col overflow-hidden pb-16">
-        <div className={`flex-1 p-2 sm:p-3 ${!showMap ? 'hidden' : ''}`}>
-          <MapView
-            markers={markers}
-            safetyPlaces={safetyData?.places || []}
-            center={mapCenter}
-            radiusCircle={
-              safetyData
-                ? {
-                    lat: safetyData.meta.center.lat,
-                    lng: safetyData.meta.center.lng,
-                    radius: safetyData.meta.radius_m,
-                  }
-                : undefined
-            }
-            showCurrentPosition={showCurrentPosition}
-          />
-        </div>
-
-        {safetyData && (
-          <div className="bg-white border-t border-gray-200 p-3 sm:p-4 overflow-y-auto max-h-[35vh] flex-shrink-0">
-            <div className="mb-3">
-              <SafetySummary data={safetyData} onUpdateCenter={handleUpdateCenter} />
-            </div>
-            <PlacesList places={safetyData.places} />
-          </div>
-        )}
+      <div className="flex-1 overflow-hidden">
+        <MapView
+          markers={markers}
+          safetyPlaces={safetyData?.places || []}
+          center={mapCenter}
+          radiusCircle={
+            safetyData
+              ? {
+                  lat: safetyData.meta.center.lat,
+                  lng: safetyData.meta.center.lng,
+                  radius: safetyData.meta.radius_m,
+                }
+              : undefined
+          }
+          showCurrentPosition={showCurrentPosition}
+        />
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-3 sm:p-4 flex gap-2 sm:gap-3 z-[900] hidden">
+      <div className="fixed bottom-4 right-4 flex flex-col gap-3 z-[900]">
         <button
           onClick={() => {
             const jsonInput = document.createElement('textarea');
@@ -262,36 +379,16 @@ function App() {
             document.body.appendChild(btnContainer);
             jsonInput.focus();
           }}
-          className="flex-1 bg-teal-500 hover:bg-teal-600 active:bg-teal-700 text-white font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
+          className="bg-teal-500 hover:bg-teal-600 active:bg-teal-700 text-white font-semibold py-3 px-5 rounded-full transition-all text-sm shadow-lg hover:shadow-xl whitespace-nowrap"
         >
           載入資料
         </button>
         <button
-          onClick={handleSetLocation}
-          className="flex-1 bg-white border-2 border-teal-500 text-teal-600 hover:bg-teal-50 active:bg-teal-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
+          onClick={handleLoadNewFormatJson}
+          className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-semibold py-3 px-5 rounded-full transition-all text-sm shadow-lg hover:shadow-xl whitespace-nowrap"
         >
-          設定位置
+          載入新格式
         </button>
-        <button
-          onClick={handleGetCurrentPosition}
-          className="flex-1 bg-white border-2 border-blue-500 text-blue-600 hover:bg-blue-50 active:bg-blue-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
-        >
-          顯示位置
-        </button>
-        <button
-          onClick={handleNotifyFlutter}
-          className="flex-1 bg-white border-2 border-purple-500 text-purple-600 hover:bg-purple-50 active:bg-purple-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
-        >
-          通知Flutter
-        </button>
-        {safetyData && (
-          <button
-            onClick={handleUpdateCenter}
-            className="flex-1 bg-white border-2 border-teal-500 text-teal-600 hover:bg-teal-50 active:bg-teal-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
-          >
-            定位中心
-          </button>
-        )}
       </div>
     </div>
   );
