@@ -206,7 +206,7 @@ function App() {
 
       <SafetyIndicator data={safetyData} />
 
-      <div className="flex-1 flex flex-col overflow-hidden pb-16">
+      <div className="flex-1 flex flex-col overflow-hidden">
         <div className={`flex-1 p-2 sm:p-3 ${!showMap ? 'hidden' : ''}`}>
           <MapView
             markers={markers}
@@ -235,7 +235,7 @@ function App() {
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-3 sm:p-4 flex gap-2 sm:gap-3 z-[900]">
+      <div className="fixed bottom-4 right-4 flex flex-col gap-3 z-[900]">
         <button
           onClick={() => {
             const jsonInput = document.createElement('textarea');
@@ -282,7 +282,7 @@ function App() {
             document.body.appendChild(btnContainer);
             jsonInput.focus();
           }}
-          className="flex-1 bg-teal-500 hover:bg-teal-600 active:bg-teal-700 text-white font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
+          className="bg-teal-500 hover:bg-teal-600 active:bg-teal-700 text-white font-semibold py-3 px-5 rounded-full transition-all text-sm shadow-lg hover:shadow-xl whitespace-nowrap"
         >
           載入資料
         </button>
@@ -338,36 +338,10 @@ function App() {
             document.body.appendChild(btnContainer);
             jsonInput.focus();
           }}
-          className="flex-1 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
+          className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-semibold py-3 px-5 rounded-full transition-all text-sm shadow-lg hover:shadow-xl whitespace-nowrap"
         >
           載入新格式
         </button>
-        <button
-          onClick={handleSetLocation}
-          className="flex-1 bg-white border-2 border-teal-500 text-teal-600 hover:bg-teal-50 active:bg-teal-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
-        >
-          設定位置
-        </button>
-        <button
-          onClick={handleGetCurrentPosition}
-          className="flex-1 bg-white border-2 border-blue-500 text-blue-600 hover:bg-blue-50 active:bg-blue-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
-        >
-          顯示位置
-        </button>
-        <button
-          onClick={handleNotifyFlutter}
-          className="flex-1 bg-white border-2 border-purple-500 text-purple-600 hover:bg-purple-50 active:bg-purple-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
-        >
-          通知Flutter
-        </button>
-        {safetyData && (
-          <button
-            onClick={handleUpdateCenter}
-            className="flex-1 bg-white border-2 border-teal-500 text-teal-600 hover:bg-teal-50 active:bg-teal-100 font-semibold py-3 sm:py-4 px-4 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg"
-          >
-            定位中心
-          </button>
-        )}
       </div>
     </div>
   );
