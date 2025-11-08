@@ -1,10 +1,11 @@
-import { MapContainer, TileLayer, Marker, Circle, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
 import { LatLngExpression } from 'leaflet';
 import { MarkerData, SafetyPlace } from '../types';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Store, Shield, Camera, Train, Target } from 'lucide-react';
 import { renderToString } from 'react-dom/server';
+import { useEffect } from 'react';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -95,6 +96,16 @@ const createCustomIcon = (type: string, safety: number) => {
   });
 };
 
+function MapUpdater({ center }: { center: LatLngExpression }) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.setView(center, map.getZoom());
+  }, [center, map]);
+
+  return null;
+}
+
 interface MapViewProps {
   markers: MarkerData[];
   safetyPlaces: SafetyPlace[];
@@ -110,6 +121,7 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
       zoom={15}
       className="h-full w-full rounded-lg shadow-lg"
     >
+      <MapUpdater center={center} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
