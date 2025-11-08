@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MapView } from './components/MapView';
+import { SafetyScoreIndicator } from './components/SafetyScoreIndicator';
 // import { MarkerForm } from './components/MarkerForm';
 // import { MarkerList } from './components/MarkerList';
 // import { JsonInput } from './components/JsonInput';
@@ -322,6 +323,10 @@ function App() {
         </h1>
         <p className="text-teal-50 text-xs sm:text-sm mt-1">為您的安全把關</p>
       </header>
+
+      {safetyData && (
+        <SafetyScoreIndicator score={safetyData.summary.safety_score} />
+      )}
 
       <div className="flex-1 overflow-hidden">
         <MapView
