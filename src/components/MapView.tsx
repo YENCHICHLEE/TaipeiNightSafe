@@ -136,16 +136,26 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
       />
 
       {showCurrentPosition && (
-        <Marker
-          position={center as [number, number]}
-          icon={createCenterIcon()}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 1000,
+            pointerEvents: 'none',
+          }}
         >
-          <Popup>
-            <div className="text-sm">
-              <p className="font-semibold">當前位置</p>
-            </div>
-          </Popup>
-        </Marker>
+          <img
+            src="/location-marker.png"
+            alt="當前位置"
+            style={{
+              width: '120px',
+              height: '120px',
+              filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.3))',
+            }}
+          />
+        </div>
       )}
 
       {radiusCircle && (
