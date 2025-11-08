@@ -100,9 +100,10 @@ interface MapViewProps {
   safetyPlaces: SafetyPlace[];
   center: LatLngExpression;
   radiusCircle?: { lat: number; lng: number; radius: number };
+  showCurrentPosition?: boolean;
 }
 
-export function MapView({ markers, safetyPlaces, center, radiusCircle }: MapViewProps) {
+export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurrentPosition }: MapViewProps) {
   return (
     <MapContainer
       center={center}
@@ -113,6 +114,29 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle }: MapView
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+
+      {showCurrentPosition && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 1000,
+            pointerEvents: 'none',
+          }}
+        >
+          <img
+            src="/截圖 2025-11-08 16.31.37.png"
+            alt="當前位置"
+            style={{
+              width: '120px',
+              height: '120px',
+              filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.3))',
+            }}
+          />
+        </div>
+      )}
 
       {radiusCircle && (
         <>

@@ -12,6 +12,7 @@ function App() {
   const [markers, setMarkers] = useState<MarkerData[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number]>([25.0330, 121.5654]);
   const [safetyData, setSafetyData] = useState<SafetyAPIResponse | null>(null);
+  const [showCurrentPosition, setShowCurrentPosition] = useState(false);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -107,7 +108,10 @@ function App() {
   };
 
   const handleGetCurrentPosition = () => {
-    alert(`當前地圖中心位置：\n緯度: ${mapCenter[0]}\n經度: ${mapCenter[1]}`);
+    setShowCurrentPosition(true);
+    setTimeout(() => {
+      setShowCurrentPosition(false);
+    }, 3000);
   };
 
   const handleNotifyFlutter = () => {
@@ -153,6 +157,7 @@ function App() {
                   }
                 : undefined
             }
+            showCurrentPosition={showCurrentPosition}
           />
         </div>
 
