@@ -116,7 +116,7 @@ interface MapViewProps {
 
 }
 
-export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurrentPosition }: MapViewProps) {
+export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurrentPosition, readOnly = false, }: MapViewProps) {
   return (
     <MapContainer
       center={center}
