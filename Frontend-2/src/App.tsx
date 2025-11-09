@@ -1,21 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MapView } from './components/MapView';
 import { SafetyScoreIndicator } from './components/SafetyScoreIndicator';
 import { MarkerData, SafetyAPIResponse } from './types';
 import { loadSafetyData } from './utils/safetyDataLoader';
 import { loadRoadSafetyData, RoadSafetyData } from './utils/roadSafetyDataLoader';
 import { sendNotification, makePhoneCall } from './utils/flutterBridge';
+import { GPSSyncReceiver } from './utils/gpsSync';
 
 function App() {
   const [markers] = useState<MarkerData[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number]>([25.0330, 121.5654]);
   const [safetyData, setSafetyData] = useState<SafetyAPIResponse | null>(null);
-  const [showCurrentPosition, setShowCurrentPosition] = useState(false);
+  const [showCurrentPosition, setShowCurrentPosition] = useState(true);
+  const [isMoving, setIsMoving] = useState(false);
   
   // 區域安全相關狀態
   const [roadSafetyData, setRoadSafetyData] = useState<RoadSafetyData | null>(null);
   const [roadSafetyLoading, setRoadSafetyLoading] = useState(false);
   const [roadSafetyError, setRoadSafetyError] = useState<string | null>(null);
+  
+  // 移動軌跡記錄
+  const [movementPath, setMovementPath] = useState<[number, number][]>([]);
+  
+  // GPS 同步
+  const gpsSyncRef = useRef<GPSSyncReceiver | null>(null);
 
   // 載入區域安全資料
   const fetchRoadSafety = async () => {
@@ -47,18 +55,41 @@ function App() {
       console.warn('⚠️ Flutter 環境未偵測到，通知未發送');
     }
     
-    // TODO: 等後端準備好後再啟用
-    // const loadInitialData = async () => {
-    //   try {
-    //     const data = await loadSafetyData(25.033964, 121.564468);
-    //     setSafetyData(data);
-    //     setMapCenter([data.meta.center.lat, data.meta.center.lng]);
-    //   } catch (error) {
-    //     console.error('❌ 初始載入失敗：', error);
-    //   }
-    // };
-    // loadInitialData();
-    // fetchRoadSafety();
+    // 初始化 GPS 同步接收
+    gpsSyncRef.current = new GPSSyncReceiver();
+    gpsSyncRef.current.connect((data) => {
+      console.log('📍 收到位置同步:', data);
+      
+      // 更新地圖中心
+      setMapCenter([data.lat, data.lng]);
+      setShowCurrentPosition(true);
+      setIsMoving(true);
+      
+      // 更新移動軌跡
+      setMovementPath((prev) => [...prev, [data.lat, data.lng]]);
+      
+      // 如果有道路資料，更新道路資料
+      if (data.roads) {
+        setRoadSafetyData(data.roads);
+      }
+      
+      // 如果有安全資料，更新安全資料
+      if (data.safetyData) {
+        console.log('🔄 更新安全資料，新的 safety_score:', data.safetyData.summary?.safety_score);
+        setSafetyData(data.safetyData);
+      } else {
+        console.log('⚠️ 收到的位置更新沒有包含 safetyData');
+      }
+      
+      // 停止移動動畫（0.5秒後）
+      setTimeout(() => setIsMoving(false), 500);
+    });
+    
+    return () => {
+      if (gpsSyncRef.current) {
+        gpsSyncRef.current.disconnect();
+      }
+    };
   }, []);
 
   // const handleAddMarker = (lat: number, lng: number, radius: number, label: string) => {
@@ -296,8 +327,10 @@ function App() {
               : undefined
           }
           showCurrentPosition={showCurrentPosition}
+          isMoving={isMoving}
           roads={roadSafetyData?.roads}
           showRoads={true}
+          movementPath={movementPath}
         />
       </div>
 

@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MapView } from './components/MapView';
 import { SafetyScoreIndicator } from './components/SafetyScoreIndicator';
 import { MarkerData, SafetyAPIResponse } from './types';
 import { loadSafetyData } from './utils/safetyDataLoader';
 import { loadRoadSafetyData, RoadSafetyData } from './utils/roadSafetyDataLoader';
-import { sendNotification, makePhoneCall, getLocation, isFlutterEnvironment } from './utils/flutterBridge';
+import { sendNotification, makePhoneCall, isFlutterEnvironment } from './utils/flutterBridge';
 import { isWithinKnownRoads, findNearestRoad } from './utils/roadSegmentChecker';
+import { GPSSyncSender } from './utils/gpsSync';
 
 function App() {
   const [markers] = useState<MarkerData[]>([]);
@@ -23,6 +24,9 @@ function App() {
   
   // 移動軌跡記錄
   const [movementPath, setMovementPath] = useState<[number, number][]>([]);
+  
+  // GPS 同步
+  const gpsSyncRef = useRef<GPSSyncSender | null>(null);
 
 
 
@@ -49,6 +53,11 @@ function App() {
         const roadData = await loadRoadSafetyData(lat, lng);
         setRoadSafetyData(roadData);
         
+        // 同步位置到 Frontend-2
+        if (gpsSyncRef.current) {
+          gpsSyncRef.current.sendLocation(lat, lng, roadData, data);
+        }
+        
         console.log('✅ 資料載入完成');
       } catch (error) {
         console.error('❌ 載入資料失敗:', error);
@@ -61,29 +70,90 @@ function App() {
           console.log(`📍 位置更新: ${lat.toFixed(6)}, ${lng.toFixed(6)} - 在 ${nearest.road.road_name} 附近 (${nearest.distance.toFixed(1)}m)`);
         }
       }
+      
+      // 即使不重新載入，也要同步位置和現有的安全資料
+      if (gpsSyncRef.current) {
+        gpsSyncRef.current.sendLocation(lat, lng, roadSafetyData, safetyData);
+      }
     }
   }, [roadSafetyData]);
 
-  // 開始模擬移動
+  // 開始模擬移動（沿著最近的路徑走）
   const startSimulation = () => {
     if (isSimulating) return;
     
-    console.log('🚶 開始模擬移動（只在離開已知路段時重新載入資料）');
+    if (!roadSafetyData || roadSafetyData.roads.length === 0) {
+      console.warn('⚠️ 沒有可用的路徑資料');
+      alert('沒有可用的路徑資料，請先載入資料');
+      return;
+    }
+    
+    // 找到最近的路段
+    const nearest = findNearestRoad(mapCenter[0], mapCenter[1], roadSafetyData.roads);
+    if (!nearest) {
+      console.warn('⚠️ 找不到最近的路段');
+      return;
+    }
+    
+    console.log(`🚶 開始沿著 ${nearest.road.road_name} 移動`);
     setIsSimulating(true);
     setIsMoving(true);
     
     // 記錄起始位置
     setMovementPath([mapCenter]);
     
-    // 每 2 秒移動一次（約 0.0001 度 ≈ 11 公尺）
+    // 找到最近路段的索引
+    const roadIndex = roadSafetyData.roads.findIndex(r => r.road_name === nearest.road.road_name);
+    
+    // 找到最近的節點索引
+    const road = roadSafetyData.roads[roadIndex];
+    let closestNodeIndex = 0;
+    let minDistance = Infinity;
+    
+    road.nodes.forEach((node, index) => {
+      const distance = Math.sqrt(
+        Math.pow(node[0] - mapCenter[0], 2) + 
+        Math.pow(node[1] - mapCenter[1], 2)
+      );
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestNodeIndex = index;
+      }
+    });
+    
+    console.log(`📍 從節點 ${closestNodeIndex}/${road.nodes.length} 開始`);
+    
+    // 每 15 秒移動到下一個節點
+    let localRoadIndex = roadIndex;
+    let localNodeIndex = closestNodeIndex;
+    
     const interval = setInterval(() => {
-      setMapCenter((prev) => {
-        const newLat = prev[0] + 0.0001; // 往北移動
-        const newLng = prev[1] + 0.00005; // 往東移動一點
-        updateLocationAndLoadData(newLat, newLng, false); // false = 不強制重新載入
-        return [newLat, newLng];
-      });
-    }, 2000);
+      if (!roadSafetyData || roadSafetyData.roads.length === 0) {
+        return;
+      }
+      
+      const currentRoad = roadSafetyData.roads[localRoadIndex];
+      localNodeIndex++;
+      
+      // 如果當前路段走完了，切換到下一條路段
+      if (localNodeIndex >= currentRoad.nodes.length) {
+        localRoadIndex = (localRoadIndex + 1) % roadSafetyData.roads.length;
+        localNodeIndex = 0;
+        
+        const nextRoad = roadSafetyData.roads[localRoadIndex];
+        console.log(`🔄 切換到下一條路段: ${nextRoad.road_name}`);
+        
+        // 移動到新路段的第一個節點
+        const [newLat, newLng] = nextRoad.nodes[0];
+        updateLocationAndLoadData(newLat, newLng, false);
+        setMapCenter([newLat, newLng]);
+      } else {
+        // 移動到當前路段的下一個節點
+        const [newLat, newLng] = currentRoad.nodes[localNodeIndex];
+        updateLocationAndLoadData(newLat, newLng, false);
+        setMapCenter([newLat, newLng]);
+      }
+    }, 15000);
     
     setSimulationInterval(interval);
   };
@@ -108,6 +178,10 @@ function App() {
   useEffect(() => {
     console.log('🎯 App 已載入，開始載入安全資料');
     
+    // 初始化 GPS 同步
+    gpsSyncRef.current = new GPSSyncSender();
+    gpsSyncRef.current.connect();
+    
     const loadInitialData = async () => {
       try {
         const data = await loadSafetyData(25.033964, 121.564468);
@@ -122,6 +196,11 @@ function App() {
         const roadData = await loadRoadSafetyData(25.033964, 121.564468);
         setRoadSafetyData(roadData);
         console.log('✅ 道路安全資料載入成功');
+        
+        // 發送初始位置
+        if (gpsSyncRef.current) {
+          gpsSyncRef.current.sendLocation(initialCenter[0], initialCenter[1], roadData, data);
+        }
       } catch (error) {
         console.error('❌ 初始載入失敗：', error);
       }
@@ -150,6 +229,10 @@ function App() {
       // 清理模擬移動的 interval
       if (simulationInterval) {
         clearInterval(simulationInterval);
+      }
+      // 斷開 GPS 同步
+      if (gpsSyncRef.current) {
+        gpsSyncRef.current.disconnect();
       }
     };
   }, []); // 空依賴陣列，只在組件掛載時執行一次
@@ -397,47 +480,6 @@ function App() {
       </div>
 
       <div className="fixed bottom-4 right-4 flex flex-col gap-3 z-[900]">
-        <button
-          onClick={() => {
-            console.log('🔔 發送通知按鈕被點擊');
-            const success = sendNotification(
-              '安全提醒',
-              '您已進入安全區域，附近有警察局和監視器'
-            );
-            if (success) {
-              console.log('✅ 通知已發送給 Flutter');
-            } else {
-              console.warn('⚠️ Flutter 環境未偵測到');
-            }
-          }}
-          className="bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-semibold w-20 h-20 rounded-full transition-all shadow-lg hover:shadow-xl flex flex-col items-center justify-center"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-1">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-          </svg>
-          <span className="text-xs">發送通知</span>
-        </button>
-
-        <button
-          onClick={() => {
-            console.log('📍 取得位置按鈕被點擊');
-            const success = getLocation();
-            if (success) {
-              console.log('✅ 位置請求已發送給 Flutter');
-            } else {
-              console.warn('⚠️ Flutter 環境未偵測到');
-            }
-          }}
-          className="bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold w-20 h-20 rounded-full transition-all shadow-lg hover:shadow-xl flex flex-col items-center justify-center"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-1">
-            <circle cx="12" cy="12" r="10"></circle>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
-          <span className="text-xs">取得位置</span>
-        </button>
-
         <button
           onClick={() => {
             console.log('📞 撥打電話按鈕被點擊');

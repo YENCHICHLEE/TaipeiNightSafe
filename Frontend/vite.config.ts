@@ -8,7 +8,7 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   server: {
-    host: '0.0.0.0', // 允許外部訪問
+    host: 'localhost', // 允許外部訪問
     port: 5173,
   },
 });

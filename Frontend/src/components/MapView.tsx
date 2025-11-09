@@ -127,7 +127,7 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
   return (
     <MapContainer
       center={center}
-      zoom={15}
+      zoom={17}
       className="h-full w-full rounded-lg shadow-lg"
     >
       <MapUpdater center={center} />
@@ -213,8 +213,8 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
             src={isMoving ? '/run.png' : '/people.png'}
             alt="當前位置"
             style={{
-              width: '120px',
-              height: '120px',
+              width: '60px',
+              height: '60px',
               filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.3))',
             }}
           />

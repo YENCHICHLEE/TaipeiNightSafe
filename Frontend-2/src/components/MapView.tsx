@@ -120,8 +120,10 @@ interface MapViewProps {
   center: LatLngExpression;
   radiusCircle?: { lat: number; lng: number; radius: number };
   showCurrentPosition?: boolean;
+  isMoving?: boolean;
   roads?: Road[];
   showRoads?: boolean;
+  movementPath?: [number, number][];
 }
 
 const getRoadColor = (score: number): string => {
@@ -136,7 +138,7 @@ const getLevelColor = (level: number): string => {
   return '#ef4444';
 };
 
-export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurrentPosition, roads, showRoads }: MapViewProps) {
+export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurrentPosition, isMoving, roads, showRoads, movementPath }: MapViewProps) {
   return (
     <MapContainer
       center={center}
@@ -150,6 +152,34 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
         maxZoom={19}
         subdomains="abcd"
       />
+
+      {/* 移動軌跡線條 */}
+      {movementPath && movementPath.length > 1 && (
+        <Polyline
+          positions={movementPath}
+          pathOptions={{
+            color: '#3b82f6',
+            weight: 4,
+            opacity: 0.8,
+            dashArray: '10, 5',
+          }}
+        >
+          <Popup>
+            <div className="min-w-[150px]">
+              <h4 className="font-bold text-base mb-2">移動軌跡</h4>
+              <p className="text-sm text-gray-600">
+                <strong>軌跡點數:</strong> {movementPath.length}
+              </p>
+              <p className="text-sm text-gray-600">
+                <strong>起點:</strong> {movementPath[0][0].toFixed(6)}, {movementPath[0][1].toFixed(6)}
+              </p>
+              <p className="text-sm text-gray-600">
+                <strong>終點:</strong> {movementPath[movementPath.length - 1][0].toFixed(6)}, {movementPath[movementPath.length - 1][1].toFixed(6)}
+              </p>
+            </div>
+          </Popup>
+        </Polyline>
+      )}
 
       {/* 道路安全線條 */}
       {showRoads && roads && roads.map((road, index) => (
@@ -189,17 +219,17 @@ export function MapView({ markers, safetyPlaces, center, radiusCircle, showCurre
             position: 'absolute',
             top: '50%',
             left: '50%',
-            transform: 'translate(-50%, -50%)',
+            transform: 'translate(-50%, -100%)', // 底部對準經緯度
             zIndex: 1000,
             pointerEvents: 'none',
           }}
         >
           <img
-            src="/people.png"
+            src={isMoving ? '/run.png' : '/people.png'}
             alt="當前位置"
             style={{
-              width: '120px',
-              height: '120px',
+              width: '60px',
+              height: '60px',
               filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.3))',
             }}
           />
