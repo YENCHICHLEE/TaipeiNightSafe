@@ -13,8 +13,13 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 overpass_api = overpy.Overpass()
 
-# Load police station data from local ODS file
+# Cache for API data
 POLICE_DATA_CACHE = None
+CCTV_DATA_CACHE = None
+MRT_DATA_CACHE = None
+ROBBERY_DATA_CACHE = None
+API_CACHE_TIME = {}
+API_CACHE_DURATION = 1800  # Cache for 30 minutes
 
 def load_police_data():
     """Load police station data from local ODS file"""
@@ -33,6 +38,29 @@ def load_police_data():
     except Exception as e:
         print(f"Error loading police data from ODS: {e}")
         return []
+
+def fetch_api_data_cached(resource_id, cache_name, limit=1000, offset=0):
+    """Fetch API data with caching"""
+    global API_CACHE_TIME
+    
+    # Check cache
+    cache_var = globals().get(cache_name)
+    if cache_var is not None and cache_name in API_CACHE_TIME:
+        cache_age = time.time() - API_CACHE_TIME[cache_name]
+        if cache_age < API_CACHE_DURATION:
+            print(f"Using cached {cache_name} ({len(cache_var)} items, age: {int(cache_age)}s)")
+            return cache_var
+    
+    # Fetch fresh data
+    print(f"Fetching {cache_name} from API...")
+    data = fetch_api_data(resource_id, limit, offset)
+    
+    # Update cache
+    globals()[cache_name] = data
+    API_CACHE_TIME[cache_name] = time.time()
+    print(f"Cached {cache_name}: {len(data)} items")
+    
+    return data
 
 # Haversine formula to calculate distance between two points in meters
 def haversine(lat1, lon1, lat2, lon2):
@@ -80,7 +108,7 @@ def calculate_safety_score(cctv_count, lamp_count, mrt_count, police_count, thef
     Rt = clamp(theft_count / theft_ref, 0.0, 1.0) if theft_ref > 0 else 0.0
     Rr = clamp(robbery_count / robbery_ref, 0.0, 1.0) if robbery_ref > 0 else 0.0
     
-    raw_score = 0.3*S + 0.1*C + 0.05*L + 0.3*P + 0.2*M - 0.4*Rt - 0.5*Rr
+    raw_score = 0.3*S + 0.1*C + 0.5*L + 0.8*P + 0.7*M - 0.4*Rt - 0.5*Rr
     clamped_score = clamp(raw_score, 0.0, 1.0)
     return round(clamped_score * 100, 2)
 
@@ -174,34 +202,73 @@ def geocode_address(address, max_retries=3):
             return None, None
     return None, None
 
+# Cache for streetlight data
+STREETLIGHT_DATA_CACHE = None
+STREETLIGHT_CACHE_TIME = None
+STREETLIGHT_CACHE_DURATION = 3600  # Cache for 1 hour
+
 # Function to fetch streetlight data from blob storage
 def fetch_streetlight_data():
+    global STREETLIGHT_DATA_CACHE, STREETLIGHT_CACHE_TIME
+    
+    # Check if cache is valid
+    if STREETLIGHT_DATA_CACHE is not None and STREETLIGHT_CACHE_TIME is not None:
+        cache_age = time.time() - STREETLIGHT_CACHE_TIME
+        if cache_age < STREETLIGHT_CACHE_DURATION:
+            print(f"Using cached streetlight data ({len(STREETLIGHT_DATA_CACHE)} items, age: {int(cache_age)}s)")
+            return STREETLIGHT_DATA_CACHE
+    
+    print("Fetching streetlight data from Azure Blob Storage...")
     url = "https://tppkl.blob.core.windows.net/blobfs/TaipeiLight.json"
-    response = requests.get(url)
-    if response.status_code != 200:
-        raise Exception("Failed to fetch streetlight data")
-    raw_data = response.json()
     
-    # Convert TWD97 coordinates to WGS84
-    converted_data = []
-    for item in raw_data:
-        try:
-            twd97_x = float(item['TWD97X'])
-            twd97_y = float(item['TWD97Y'])
-            lat, lng = twd97_to_wgs84(twd97_x, twd97_y)
+    try:
+        # Add timeout to prevent hanging
+        response = requests.get(url, timeout=30)
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch streetlight data: HTTP {response.status_code}")
+        
+        print("Parsing streetlight JSON data...")
+        raw_data = response.json()
+        print(f"Converting {len(raw_data)} streetlight coordinates...")
+        
+        # Convert TWD97 coordinates to WGS84
+
+
+        
+        converted_data = []
+        for idx, item in enumerate(raw_data):
+            if idx % 10000 == 0 and idx > 0:
+                print(f"  Converted {idx}/{len(raw_data)} streetlights...")
             
-            converted_item = item.copy()
-            converted_item['緯度'] = lat
-            converted_item['經度'] = lng
-            converted_item['燈號'] = item.get('SerialNumber', 'Unknown')
-            converted_data.append(converted_item)
-        except (KeyError, ValueError):
-            continue
+            try:
+                twd97_x = float(item['TWD97X'])
+                twd97_y = float(item['TWD97Y'])
+                lat, lng = twd97_to_wgs84(twd97_x, twd97_y)
+                
+                converted_item = item.copy()
+                converted_item['緯度'] = lat
+                converted_item['經度'] = lng
+                converted_item['燈號'] = item.get('SerialNumber', 'Unknown')
+                converted_data.append(converted_item)
+            except (KeyError, ValueError):
+                continue
+        
+        # Cache the result
+        STREETLIGHT_DATA_CACHE = converted_data
+        STREETLIGHT_CACHE_TIME = time.time()
+        print(f"Streetlight data cached: {len(converted_data)} items")
+        
+        return converted_data
     
-    return converted_data
+    except requests.Timeout:
+        print("ERROR: Streetlight data fetch timed out after 30 seconds")
+        raise Exception("Streetlight data fetch timed out")
+    except Exception as e:
+        print(f"ERROR: Failed to fetch streetlight data: {str(e)}")
+        raise
 
 # API endpoint to fetch CCTV, MRT and robbery incident data and transform it
-@app.route('/get_safety_data', methods=['GET'])
+@app.route('/ㄋ', methods=['GET'])
 def get_safety_data():
     # Get parameters from query string
     at = request.args.get('at', '2025-11-08T23:00:00+08:00')  # Default to example
@@ -212,9 +279,9 @@ def get_safety_data():
 
     places = []
 
-    # Fetch and process CCTV data
+    # Fetch and process CCTV data (with caching)
     try:
-        cctv_results = fetch_api_data("d317a3c4-ff08-48af-894e-31dfb5155de3")
+        cctv_results = fetch_api_data_cached("d317a3c4-ff08-48af-894e-31dfb5155de3", "CCTV_DATA_CACHE")
         for item in cctv_results:
             try:
                 lat = float(item['wgsy'])
@@ -234,9 +301,9 @@ def get_safety_data():
     except Exception as e:
         print(f"Error fetching CCTV data: {e}")
 
-    # Fetch and process MRT exit data
+    # Fetch and process MRT exit data (with caching)
     try:
-        mrt_results = fetch_api_data("307a7f61-e302-4108-a817-877ccbfca7c1")
+        mrt_results = fetch_api_data_cached("307a7f61-e302-4108-a817-877ccbfca7c1", "MRT_DATA_CACHE")
         for item in mrt_results:
             try:
                 lat = float(item['緯度'])
@@ -256,9 +323,9 @@ def get_safety_data():
     except Exception as e:
         print(f"Error fetching MRT data: {e}")
 
-    # Fetch and process robbery incident data
+    # Fetch and process robbery incident data (with caching)
     try:
-        robbery_results = fetch_api_data("6ecb4c41-fbc9-4b04-b182-a7da6c780f8d")
+        robbery_results = fetch_api_data_cached("6ecb4c41-fbc9-4b04-b182-a7da6c780f8d", "ROBBERY_DATA_CACHE")
         for item in robbery_results:
             try:
                 lat = float(item['緯度'])
@@ -530,32 +597,51 @@ def get_nearby_roads_safety():
     
     print(f"Fetching roads for center ({center_lat}, {center_lng}) with search_radius={search_radius_m}m, safety_radius={safety_radius_m}m")
     
-    # Query Overpass API for roads
-    try:
-        query = f"""
-        [out:json][timeout:25];
-        (
-          way["highway"]["highway"!~"motorway|motorway_link|trunk|trunk_link"]({south},{west},{north},{east});
-        );
-        out body;
-        >;
-        out skel qt;
-        """
-        print(f"Querying Overpass API...")
-        result = overpass_api.query(query)
-        print(f"Found {len(result.ways)} road segments")
-    except Exception as e:
-        print(f"Overpass API error: {str(e)}")
-        return jsonify({"error": f"Overpass API error: {str(e)}"}), 500
+    # Query Overpass API for roads with retry logic
+    max_retries = 3
+    retry_delay = 2
+    result = None
     
-    # Fetch CCTV, MRT, robbery, streetlight and police data once
+    for attempt in range(max_retries):
+        try:
+            query = f"""
+            [out:json][timeout:25];
+            (
+              way["highway"]["highway"!~"motorway|motorway_link|trunk|trunk_link"]({south},{west},{north},{east});
+            );
+            out body;
+            >;
+            out skel qt;
+            """
+            print(f"Querying Overpass API (attempt {attempt + 1}/{max_retries})...")
+            result = overpass_api.query(query)
+            print(f"Found {len(result.ways)} road segments")
+            break
+        except Exception as e:
+            error_msg = str(e)
+            print(f"Overpass API error (attempt {attempt + 1}/{max_retries}): {error_msg}")
+            
+            if attempt < max_retries - 1:
+                if "load too high" in error_msg.lower() or "rate limit" in error_msg.lower():
+                    print(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    return jsonify({"error": f"Overpass API error: {error_msg}"}), 500
+            else:
+                return jsonify({"error": f"Overpass API error after {max_retries} attempts: {error_msg}"}), 500
+    
+    if result is None:
+        return jsonify({"error": "Failed to query Overpass API"}), 500
+    
+    # Fetch CCTV, MRT, robbery, streetlight and police data once (with caching)
     print("Fetching safety data from Taipei APIs...")
     try:
-        cctv_data = fetch_api_data("d317a3c4-ff08-48af-894e-31dfb5155de3")
+        cctv_data = fetch_api_data_cached("d317a3c4-ff08-48af-894e-31dfb5155de3", "CCTV_DATA_CACHE")
         print(f"Loaded {len(cctv_data)} CCTV cameras")
-        mrt_data = fetch_api_data("307a7f61-e302-4108-a817-877ccbfca7c1")
+        mrt_data = fetch_api_data_cached("307a7f61-e302-4108-a817-877ccbfca7c1", "MRT_DATA_CACHE")
         print(f"Loaded {len(mrt_data)} MRT exits")
-        robbery_data = fetch_api_data("6ecb4c41-fbc9-4b04-b182-a7da6c780f8d")
+        robbery_data = fetch_api_data_cached("6ecb4c41-fbc9-4b04-b182-a7da6c780f8d", "ROBBERY_DATA_CACHE")
         print(f"Loaded {len(robbery_data)} robbery incidents")
         
         # Pre-filter streetlights to search area to avoid processing 145k items per road
@@ -699,8 +785,10 @@ def get_nearby_roads_safety():
     return jsonify(response_data)
 
 # API endpoint to calculate route safety score (between two points)
-@app.route('/get_route_safety', methods=['GET'])
-def get_route_safety():
+# ⚠️ DEPRECATED: This version queries too many roads from Overpass API
+# Use /get_route_safety_optimized instead
+@app.route('/get_route_safety_old', methods=['GET'])
+def get_route_safety_old():
     # Get parameters
     start_lat = float(request.args.get('start_lat'))
     start_lng = float(request.args.get('start_lng'))
@@ -723,26 +811,48 @@ def get_route_safety():
     west = min_lng - lng_offset
     east = max_lng + lng_offset
     
-    # Query Overpass API for roads
-    try:
-        query = f"""
-        [out:json];
-        (
-          way["highway"]["highway"!~"motorway|motorway_link|trunk|trunk_link"]({south},{west},{north},{east});
-        );
-        out body;
-        >;
-        out skel qt;
-        """
-        result = overpass_api.query(query)
-    except Exception as e:
-        return jsonify({"error": f"Overpass API error: {str(e)}"}), 500
+    # Query Overpass API for roads with retry logic
+    max_retries = 3
+    retry_delay = 2
+    result = None
     
-    # Fetch CCTV, MRT, robbery, streetlight and police data once
+    for attempt in range(max_retries):
+        try:
+            query = f"""
+            [out:json][timeout:25];
+            (
+              way["highway"]["highway"!~"motorway|motorway_link|trunk|trunk_link"]({south},{west},{north},{east});
+            );
+            out body;
+            >;
+            out skel qt;
+            """
+            print(f"Querying Overpass API for route (attempt {attempt + 1}/{max_retries})...")
+            result = overpass_api.query(query)
+            print(f"Found {len(result.ways)} road segments for route")
+            break
+        except Exception as e:
+            error_msg = str(e)
+            print(f"Overpass API error (attempt {attempt + 1}/{max_retries}): {error_msg}")
+            
+            if attempt < max_retries - 1:
+                if "load too high" in error_msg.lower() or "rate limit" in error_msg.lower():
+                    print(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    return jsonify({"error": f"Overpass API error: {error_msg}"}), 500
+            else:
+                return jsonify({"error": f"Overpass API error after {max_retries} attempts: {error_msg}"}), 500
+    
+    if result is None:
+        return jsonify({"error": "Failed to query Overpass API"}), 500
+    
+    # Fetch CCTV, MRT, robbery, streetlight and police data once (with caching)
     try:
-        cctv_data = fetch_api_data("d317a3c4-ff08-48af-894e-31dfb5155de3")
-        mrt_data = fetch_api_data("307a7f61-e302-4108-a817-877ccbfca7c1")
-        robbery_data = fetch_api_data("6ecb4c41-fbc9-4b04-b182-a7da6c780f8d")
+        cctv_data = fetch_api_data_cached("d317a3c4-ff08-48af-894e-31dfb5155de3", "CCTV_DATA_CACHE")
+        mrt_data = fetch_api_data_cached("307a7f61-e302-4108-a817-877ccbfca7c1", "MRT_DATA_CACHE")
+        robbery_data = fetch_api_data_cached("6ecb4c41-fbc9-4b04-b182-a7da6c780f8d", "ROBBERY_DATA_CACHE")
         streetlight_data = fetch_streetlight_data()
         police_data = load_police_data()
     except Exception as e:
@@ -836,6 +946,416 @@ def get_route_safety():
             'overall_score': overall_score
         },
         'segments': road_segments
+    }
+    
+    return jsonify(response_data)
+
+# API endpoint to calculate route safety score (optimized version)
+
+# API endpoint to find and compare multiple routes with safety scores
+@app.route('/find_safe_routes', methods=['POST'])
+def find_safe_routes():
+    """
+    找出多條路徑並比較安全性
+    回傳最安全的路徑以及替代路徑
+    """
+    data = request.get_json()
+    
+    start_lat = data.get('start_lat')
+    start_lng = data.get('start_lng')
+    end_lat = data.get('end_lat')
+    end_lng = data.get('end_lng')
+    radius_m = data.get('radius_m', 200)
+    
+    if not all([start_lat, start_lng, end_lat, end_lng]):
+        return jsonify({"error": "Missing coordinates"}), 400
+    
+    print(f"🔍 Finding safe routes from ({start_lat}, {start_lng}) to ({end_lat}, {end_lng})")
+    
+    try:
+        # 使用 OSRM 獲取多條替代路徑
+        osrm_url = f"https://router.project-osrm.org/route/v1/driving/{start_lng},{start_lat};{end_lng},{end_lat}"
+        params = {
+            'overview': 'full',
+            'geometries': 'geojson',
+            'alternatives': 'true',  # 請求替代路徑
+            'steps': 'false'
+        }
+        
+        print("📍 Requesting routes from OSRM...")
+        osrm_response = requests.get(osrm_url, params=params, timeout=10)
+        
+        if osrm_response.status_code != 200:
+            return jsonify({"error": "Failed to get routes from OSRM"}), 500
+        
+        osrm_data = osrm_response.json()
+        
+        if 'routes' not in osrm_data or len(osrm_data['routes']) == 0:
+            return jsonify({"error": "No routes found"}), 404
+        
+        routes = osrm_data['routes']
+        print(f"✅ Found {len(routes)} route(s)")
+        
+        # 載入安全資料（使用快取）
+        print("🔍 Loading safety data...")
+        cctv_data = fetch_api_data_cached("d317a3c4-ff08-48af-894e-31dfb5155de3", "CCTV_DATA_CACHE")
+        mrt_data = fetch_api_data_cached("307a7f61-e302-4108-a817-877ccbfca7c1", "MRT_DATA_CACHE")
+        robbery_data = fetch_api_data_cached("6ecb4c41-fbc9-4b04-b182-a7da6c780f8d", "ROBBERY_DATA_CACHE")
+        
+        # 預先過濾路燈資料
+        all_streetlight_data = fetch_streetlight_data()
+        
+        # 計算所有路徑的邊界
+        all_lats = []
+        all_lngs = []
+        for route in routes:
+            coords = route['geometry']['coordinates']
+            all_lats.extend([c[1] for c in coords])
+            all_lngs.extend([c[0] for c in coords])
+        
+        min_lat, max_lat = min(all_lats), max(all_lats)
+        min_lng, max_lng = min(all_lngs), max(all_lngs)
+        margin = (radius_m / 111000)
+        
+        streetlight_data = [
+            item for item in all_streetlight_data
+            if (min_lat - margin <= float(item['緯度']) <= max_lat + margin and
+                min_lng - margin <= float(item['經度']) <= max_lng + margin)
+        ]
+        
+        police_data = load_police_data()
+        print(f"✅ Safety data loaded")
+        
+        # 分析每條路徑
+        analyzed_routes = []
+        
+        for idx, route in enumerate(routes):
+            print(f"\n📊 Analyzing route {idx + 1}/{len(routes)}...")
+            
+            # 轉換座標格式
+            coordinates = [[coord[1], coord[0]] for coord in route['geometry']['coordinates']]
+            
+            # 取樣點
+            if len(coordinates) <= 20:
+                sample_interval = 1
+            elif len(coordinates) <= 50:
+                sample_interval = 2
+            else:
+                sample_interval = max(2, len(coordinates) // 25)
+            
+            sample_points = coordinates[::sample_interval]
+            if coordinates[-1] not in sample_points:
+                sample_points.append(coordinates[-1])
+            
+            # 分析每個取樣點
+            segments = []
+            total_cctv = 0
+            total_metro = 0
+            total_robbery = 0
+            total_streetlight = 0
+            total_police = 0
+            
+            for i, coord in enumerate(sample_points):
+                lat, lng = coord
+                
+                features = get_safety_features_in_radius(
+                    lat, lng, radius_m,
+                    cctv_data, mrt_data, robbery_data, streetlight_data, police_data
+                )
+                
+                cctv_count = sum(1 for f in features if f['type'] == 'cctv')
+                metro_count = sum(1 for f in features if f['type'] == 'metro')
+                robbery_count = sum(1 for f in features if f['type'] == 'robbery_incident')
+                streetlight_count = sum(1 for f in features if f['type'] == 'streetlight')
+                police_count = sum(1 for f in features if f['type'] == 'police')
+                
+                segment_score = calculate_safety_score(
+                    cctv_count=cctv_count,
+                    lamp_count=streetlight_count,
+                    mrt_count=metro_count,
+                    police_count=police_count,
+                    theft_count=0,
+                    robbery_count=robbery_count,
+                    store_count=0
+                )
+                
+                if segment_score >= 60:
+                    segment_level = 3
+                    segment_label = "安全"
+                elif segment_score >= 40:
+                    segment_level = 2
+                    segment_label = "需注意"
+                else:
+                    segment_level = 1
+                    segment_label = "危險"
+                
+                segments.append({
+                    'segment_index': i,
+                    'location': {'lat': lat, 'lng': lng},
+                    'cctv_count': cctv_count,
+                    'metro_count': metro_count,
+                    'robbery_count': robbery_count,
+                    'streetlight_count': streetlight_count,
+                    'police_count': police_count,
+                    'safety_score': segment_score,
+                    'level': segment_level,
+                    'label': segment_label
+                })
+                
+                total_cctv += cctv_count
+                total_metro += metro_count
+                total_robbery += robbery_count
+                total_streetlight += streetlight_count
+                total_police += police_count
+            
+            # 計算整體安全分數
+            overall_score = calculate_safety_score(
+                cctv_count=total_cctv,
+                lamp_count=total_streetlight,
+                mrt_count=total_metro,
+                police_count=total_police,
+                theft_count=0,
+                robbery_count=total_robbery,
+                store_count=0
+            )
+            
+            if overall_score >= 60:
+                level = 3
+                label = "安全"
+            elif overall_score >= 40:
+                level = 2
+                label = "需注意"
+            else:
+                level = 1
+                label = "危險"
+            
+            analyzed_routes.append({
+                'route_index': idx,
+                'is_recommended': False,  # 稍後設定
+                'geometry': coordinates,
+                'distance_m': route['distance'],
+                'duration_s': route['duration'],
+                'summary': {
+                    'total_segments': len(segments),
+                    'total_cctv': total_cctv,
+                    'total_metro': total_metro,
+                    'total_robbery': total_robbery,
+                    'total_streetlight': total_streetlight,
+                    'total_police': total_police,
+                    'overall_score': overall_score,
+                    'level': level,
+                    'label': label
+                },
+                'segments': segments
+            })
+            
+            print(f"   ✅ Route {idx + 1}: {label} (score: {overall_score})")
+        
+        # 找出最安全的路徑
+        best_route_idx = max(range(len(analyzed_routes)), 
+                            key=lambda i: analyzed_routes[i]['summary']['overall_score'])
+        analyzed_routes[best_route_idx]['is_recommended'] = True
+        
+        print(f"\n🏆 Recommended route: Route {best_route_idx + 1}")
+        
+        response_data = {
+            'start': {'lat': start_lat, 'lng': start_lng},
+            'end': {'lat': end_lat, 'lng': end_lng},
+            'radius_m': radius_m,
+            'total_routes': len(analyzed_routes),
+            'recommended_route_index': best_route_idx,
+            'routes': analyzed_routes
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# API endpoint to calculate route safety score (optimized version)
+# This version uses OSRM route coordinates directly, no Overpass API needed
+@app.route('/get_route_safety', methods=['POST'])
+def get_route_safety():
+    """
+    優化版本：直接使用 OSRM 的路徑座標
+    不需要查詢 Overpass API，速度快且穩定
+    """
+    data = request.get_json()
+    
+    # 從前端接收 OSRM 的路徑座標
+    route_coordinates = data.get('route_coordinates')  # [[lat, lng], [lat, lng], ...]
+    radius_m = data.get('radius_m', 200)
+    
+    if not route_coordinates or len(route_coordinates) < 2:
+        return jsonify({"error": "Invalid route coordinates"}), 400
+    
+    print(f"Analyzing route with {len(route_coordinates)} points")
+    
+    # Fetch safety data once (with caching)
+    try:
+        print("Fetching safety data from Taipei APIs...")
+        cctv_data = fetch_api_data_cached("d317a3c4-ff08-48af-894e-31dfb5155de3", "CCTV_DATA_CACHE")
+        print(f"Loaded {len(cctv_data)} CCTV cameras")
+        mrt_data = fetch_api_data_cached("307a7f61-e302-4108-a817-877ccbfca7c1", "MRT_DATA_CACHE")
+        print(f"Loaded {len(mrt_data)} MRT exits")
+        robbery_data = fetch_api_data_cached("6ecb4c41-fbc9-4b04-b182-a7da6c780f8d", "ROBBERY_DATA_CACHE")
+        print(f"Loaded {len(robbery_data)} robbery incidents")
+        
+        # Pre-filter streetlights to route area
+        all_streetlight_data = fetch_streetlight_data()
+        print(f"Loaded {len(all_streetlight_data)} streetlights, filtering to route area...")
+        
+        # Calculate route bounding box
+        lats = [coord[0] for coord in route_coordinates]
+        lngs = [coord[1] for coord in route_coordinates]
+        min_lat, max_lat = min(lats), max(lats)
+        min_lng, max_lng = min(lngs), max(lngs)
+        
+        # Add margin for radius
+        margin = (radius_m / 111000)  # Rough conversion to degrees
+        streetlight_data = []
+        for item in all_streetlight_data:
+            try:
+                lat = float(item['緯度'])
+                lng = float(item['經度'])
+                if (min_lat - margin <= lat <= max_lat + margin and 
+                    min_lng - margin <= lng <= max_lng + margin):
+                    streetlight_data.append(item)
+            except (KeyError, ValueError):
+                continue
+        print(f"Filtered to {len(streetlight_data)} streetlights in route area")
+        
+        police_data = load_police_data()
+        print(f"Loaded {len(police_data)} police stations")
+    except Exception as e:
+        print(f"Failed to fetch safety data: {str(e)}")
+        return jsonify({"error": f"Failed to fetch safety data: {str(e)}"}), 500
+    
+    # 將路徑分段（取樣以提高效能）
+    if len(route_coordinates) <= 20:
+        sample_interval = 1  # 短路徑：全部計算
+    elif len(route_coordinates) <= 50:
+        sample_interval = 2  # 中等路徑：每 2 個點取 1 個
+    else:
+        sample_interval = max(2, len(route_coordinates) // 25)  # 長路徑：最多 25 個取樣點
+    
+    sample_points = route_coordinates[::sample_interval]
+    
+    # 確保終點被包含
+    if route_coordinates[-1] not in sample_points:
+        sample_points.append(route_coordinates[-1])
+    
+    print(f"Sampling {len(sample_points)} points from route (interval: {sample_interval})")
+    
+    # 對每個取樣點計算周圍的安全資源
+    route_segments = []
+    total_cctv = 0
+    total_metro = 0
+    total_robbery = 0
+    total_streetlight = 0
+    total_police = 0
+    
+    for i, coord in enumerate(sample_points):
+        lat, lng = coord
+        
+        # Get safety features around this point
+        features = get_safety_features_in_radius(
+            lat, lng, radius_m, 
+            cctv_data, mrt_data, robbery_data, streetlight_data, police_data
+        )
+        
+        # Count by type
+        cctv_count = sum(1 for f in features if f['type'] == 'cctv')
+        metro_count = sum(1 for f in features if f['type'] == 'metro')
+        robbery_count = sum(1 for f in features if f['type'] == 'robbery_incident')
+        streetlight_count = sum(1 for f in features if f['type'] == 'streetlight')
+        police_count = sum(1 for f in features if f['type'] == 'police')
+        
+        # Calculate segment safety score
+        segment_score = calculate_safety_score(
+            cctv_count=cctv_count,
+            lamp_count=streetlight_count,
+            mrt_count=metro_count,
+            police_count=police_count,
+            theft_count=0,
+            robbery_count=robbery_count,
+            store_count=0
+        )
+        
+        # Determine segment level and label
+        if segment_score >= 60:
+            segment_level = 3
+            segment_label = "安全"
+        elif segment_score >= 40:
+            segment_level = 2
+            segment_label = "需注意"
+        else:
+            segment_level = 1
+            segment_label = "危險"
+        
+        route_segments.append({
+            'segment_index': i,
+            'location': {'lat': lat, 'lng': lng},
+            'cctv_count': cctv_count,
+            'metro_count': metro_count,
+            'robbery_count': robbery_count,
+            'streetlight_count': streetlight_count,
+            'police_count': police_count,
+            'safety_score': segment_score,
+            'level': segment_level,
+            'label': segment_label
+        })
+        
+        total_cctv += cctv_count
+        total_metro += metro_count
+        total_robbery += robbery_count
+        total_streetlight += streetlight_count
+        total_police += police_count
+    
+    # Calculate overall route safety score
+    overall_score = calculate_safety_score(
+        cctv_count=total_cctv,
+        lamp_count=total_streetlight,
+        mrt_count=total_metro,
+        police_count=total_police,
+        theft_count=0,
+        robbery_count=total_robbery,
+        store_count=0
+    )
+    
+    # Determine level and label
+    if overall_score >= 60:
+        level = 3
+        label = "安全"
+    elif overall_score >= 40:
+        level = 2
+        label = "需注意"
+    else:
+        level = 1
+        label = "危險"
+    
+    print(f"Route analysis complete: score={overall_score}, level={label}")
+    
+    # Construct response
+    response_data = {
+        'route': {
+            'total_points': len(route_coordinates),
+            'sampled_points': len(sample_points),
+            'radius_m': radius_m
+        },
+        'summary': {
+            'total_segments': len(route_segments),
+            'total_cctv': total_cctv,
+            'total_metro': total_metro,
+            'total_robbery': total_robbery,
+            'total_streetlight': total_streetlight,
+            'total_police': total_police,
+            'overall_score': overall_score,
+            'level': level,
+            'label': label
+        },
+        'segments': route_segments
     }
     
     return jsonify(response_data)
